@@ -1,5 +1,6 @@
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
+import { getReceiverSocketId, io } from "../socket/socket.js";
 
 export const sendMessage = async (req, res) => {
   try {
@@ -27,13 +28,18 @@ export const sendMessage = async (req, res) => {
       conversation.messages.push(newMessage._id);
     }
 
-    //SOCKET IO Functionality Will Go Here
-
     // await conversation.save();
     // await newMessage.save();
 
     //this will run in parallel with conversation
     await Promise.all([conversation.save(), newMessage.save()]);
+
+    //SOCKET IO Functionality Will Go Here
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      //io.to(<socket_id>).emit() used to send events to specific client
+      io.to(receiverSocketId).emit("newMessage", newMessage);
+    }
 
     res.status(201).json(newMessage);
   } catch (error) {
@@ -51,9 +57,13 @@ export const getMessages = async (req, res) => {
       participants: { $all: [senderId, userToChatId] },
     }).populate("messages");
 
-    res.status(200).json(conversation.messages);
+    if (!conversation) return res.status(200).json([]);
+
+    const messages = conversation.messages;
+
+    res.status(200).json(messages);
   } catch (error) {
-    console.log("Error in sendMessage Controller", error.message);
+    console.log("Error in get message Controller", error.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
